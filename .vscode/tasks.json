@@ -1,0 +1,59 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Debug Shell Test",
+			"type": "shell",
+			"command": "cd \"c:\\Users\\meena\\OneDrive\\Desktop\\Ressume-JD Analyzer\\backand\" && node -e \"console.log('test')\"",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Debug Shell Test 2",
+			"type": "shell",
+			"command": "cd \"c:\\Users\\meena\\OneDrive\\Desktop\\Ressume-JD Analyzer\\backand\"; node -e \"console.log('test')\"",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Debug Shell Test 3",
+			"type": "shell",
+			"command": "cd \"c:\\Users\\meena\\OneDrive\\Desktop\\Ressume-JD Analyzer\\backand\"; node -e \"console.log('test')\"",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Debug Shell Test 4",
+			"type": "shell",
+			"command": "cd /d 'C:\\Users\\meena\\OneDrive\\Desktop\\Ressume-JD Analyzer\\backand'; node -e \"console.log('test')\"",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Debug Shell Test 5",
+			"type": "shell",
+			"command": "node -e \"console.log('test')\"",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Install Frontend Dependencies",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"install",
+				"--prefix",
+				"fronted"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Install Frontend Dependencies 2",
+			"type": "shell",
+			"command": "Set-Location 'C:\\Users\\meena\\OneDrive\\Desktop\\Ressume-JD Analyzer\\fronted'; npm install",
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}

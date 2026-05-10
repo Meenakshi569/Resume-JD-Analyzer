@@ -14,48 +14,149 @@ const interviewReportSchema = z.object({
         question: z.string().describe("The technical question can be asked in the interview"),
         intention: z.string().describe("The intention of interviewer behind asking this question"),
         answer: z.string().describe("How to answer this question, what points to cover, what approach to take etc.")
-    })).describe("Technical questions that can be asked in the interview along with their intention and how to answer them"),
+    })).min(3).describe("Technical questions that can be asked in the interview along with their intention and how to answer them"),
     behavioralQuestions: z.array(z.object({
         question: z.string().describe("The technical question can be asked in the interview"),
         intention: z.string().describe("The intention of interviewer behind asking this question"),
         answer: z.string().describe("How to answer this question, what points to cover, what approach to take etc.")
-    })).describe("Behavioral questions that can be asked in the interview along with their intention and how to answer them"),
+    })).min(3).describe("Behavioral questions that can be asked in the interview along with their intention and how to answer them"),
     skillGaps: z.array(z.object({
         skill: z.string().describe("The skill which the candidate is lacking"),
         severity: z.enum([ "low", "medium", "high" ]).describe("The severity of this skill gap, i.e. how important is this skill for the job and how much it can impact the candidate's chances")
-    })).describe("List of skill gaps in the candidate's profile along with their severity"),
+    })).min(1).describe("List of skill gaps in the candidate's profile along with their severity"),
     preparationPlan: z.array(z.object({
         day: z.number().describe("The day number in the preparation plan, starting from 1"),
         focus: z.string().describe("The main focus of this day in the preparation plan, e.g. data structures, system design, mock interviews etc."),
         tasks: z.array(z.string()).describe("List of tasks to be done on this day to follow the preparation plan, e.g. read a specific book or article, solve a set of problems, watch a video etc.")
-    })).describe("A day-wise preparation plan for the candidate to follow in order to prepare for the interview effectively"),
+    })).min(3).describe("A day-wise preparation plan for the candidate to follow in order to prepare for the interview effectively"),
     title: z.string().describe("The title of the job for which the interview report is generated"),
 })
 
+function parseMaybeJson(value) {
+    if (typeof value !== 'string') {
+        return value
+    }
+
+    const trimmed = value.trim()
+    if (!trimmed) {
+        return value
+    }
+
+    const unquoted = trimmed.replace(/^`+|`+$/g, '').trim()
+    const tryParse = (text) => {
+        try {
+            return JSON.parse(text)
+        } catch {
+            return null
+        }
+    }
+
+    let parsed = tryParse(unquoted)
+    if (parsed !== null) {
+        return parsed
+    }
+
+    if ((unquoted.startsWith('"') && unquoted.endsWith('"')) || (unquoted.startsWith("'") && unquoted.endsWith("'"))) {
+        parsed = tryParse(unquoted.slice(1, -1))
+        if (parsed !== null) {
+            return parsed
+        }
+    }
+
+    parsed = tryParse(unquoted.replace(/\\"/g, '"').replace(/\\'/g, "'"))
+    if (parsed !== null) {
+        return parsed
+    }
+
+    return value
+}
+
+function normalizeQuestions(items) {
+    if (!Array.isArray(items)) {
+        return []
+    }
+
+    return items.map((item) => {
+        const parsed = parseMaybeJson(item) || {}
+        return {
+            question: String(parsed.question || parsed.prompt || parsed.text || ''),
+            intention: String(parsed.intention || parsed.reason || ''),
+            answer: String(parsed.answer || parsed.modelAnswer || parsed.response || '')
+        }
+    })
+}
+
+function normalizeSkillGaps(items) {
+    if (!Array.isArray(items)) {
+        return []
+    }
+
+    return items.map((item) => {
+        const parsed = parseMaybeJson(item) || {}
+        const severity = String(parsed.severity || parsed.level || '').toLowerCase()
+        return {
+            skill: String(parsed.skill || parsed.focus || ''),
+            severity: ['low', 'medium', 'high'].includes(severity) ? severity : 'medium'
+        }
+    })
+}
+
+function normalizePreparationPlan(items) {
+    if (!Array.isArray(items)) {
+        return []
+    }
+
+    return items.map((item, index) => {
+        const parsed = parseMaybeJson(item) || {}
+        const rawTasks = parsed.tasks
+        let tasks = []
+
+        if (Array.isArray(rawTasks)) {
+            tasks = rawTasks.map(String)
+        } else if (typeof rawTasks === 'string') {
+            tasks = rawTasks
+                .split(/\r?\n|;|•|‣|◦|-/)
+                .map((task) => task.trim())
+                .filter(Boolean)
+        }
+
+        const parsedDay = Number(parsed.day)
+        const day = Number.isFinite(parsedDay) && parsedDay > 0 ? parsedDay : index + 1
+
+        return {
+            day,
+            focus: String(parsed.focus || parsed.title || ''),
+            tasks
+        }
+    })
+}
+
+function normalizeInterviewReport(report, jobDescription) {
+    const parsed = report || {}
+    return {
+        title: String(parsed.title || jobDescription || 'Interview Report'),
+        matchScore: Number(parsed.matchScore ?? 0),
+        technicalQuestions: normalizeQuestions(parsed.technicalQuestions),
+        behavioralQuestions: normalizeQuestions(parsed.behavioralQuestions),
+        skillGaps: normalizeSkillGaps(parsed.skillGaps),
+        preparationPlan: normalizePreparationPlan(parsed.preparationPlan)
+    }
+}
+
 async function generateInterviewReport({ resume, selfDescription, jobDescription }) {
-
-
-    const prompt = `Generate an interview report for a candidate with the following details:
-                        Resume: ${resume}
-                        Self Description: ${selfDescription}
-                        Job Description: ${jobDescription}
-`
+    const prompt = `Generate a detailed interview report for a candidate using the following information.\n\nResume: ${resume}\nSelf Description: ${selfDescription}\nJob Description: ${jobDescription}\n\nReturn a valid JSON object with these fields exactly: title, matchScore, technicalQuestions, behavioralQuestions, skillGaps, preparationPlan.\n- technicalQuestions must be an array of at least 3 objects, each with keys question, intention, and answer. Do not serialize objects as strings.\n- behavioralQuestions must be an array of at least 3 objects, each with keys question, intention, and answer.\n- skillGaps must be an array of at least 1 object, each with keys skill and severity (low, medium, high).\n- preparationPlan must be an array of at least 3 objects, each with keys day, focus, and tasks (tasks must be an array of strings).\n\nUse the resume and self description to personalize the report and make the content practical, specific, and role-focused.\n`
 
     const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "models/gemini-1.0-pro",
         contents: prompt,
         config: {
-            responseMimeType: "application/json",
-            responseSchema: zodToJsonSchema(interviewReportSchema),
+            responseMimeType: "application/json"
         }
     })
 
-    return JSON.parse(response.text)
-
-
+    const raw = JSON.parse(response.text)
+    return normalizeInterviewReport(raw, jobDescription)
 }
-
-
 
 async function generatePdfFromHtml(htmlContent) {
     const browser = await puppeteer.launch()
@@ -96,7 +197,7 @@ async function generateResumePdf({ resume, selfDescription, jobDescription }) {
                     `
 
     const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-1.0-pro",
         contents: prompt,
         config: {
             responseMimeType: "application/json",
