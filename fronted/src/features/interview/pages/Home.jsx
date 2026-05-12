@@ -1,11 +1,13 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import "../style/home.scss"
 import { useInterview } from '../hooks/useInterview.js'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../../auth/hooks/useAuth'
 
 const Home = () => {
 
-    const { loading, generateReport, reports } = useInterview()
+    const { user, handleLogout } = useAuth()
+    const { loading, generateReport, reports, getReports } = useInterview()
     const [ jobDescription, setJobDescription ] = useState("")
     const [ selfDescription, setSelfDescription ] = useState("")
     const [ selectedFile, setSelectedFile ] = useState(null)
@@ -14,6 +16,10 @@ const Home = () => {
     const resumeInputRef = useRef()
 
     const navigate = useNavigate()
+
+    useEffect(() => {
+        getReports()
+    }, [getReports])
 
     const handleGenerateReport = async () => {
         const resumeFile = selectedFile || resumeInputRef.current?.files?.[0]
@@ -27,7 +33,10 @@ const Home = () => {
 
         if (data && data._id) {
             navigate(`/interview/${data._id}`)
+            return
         }
+
+        window.alert("Unable to generate report. Please check your input and try again.")
     }
 
     const handleFileChange = (e) => {
@@ -92,8 +101,14 @@ const Home = () => {
             {showProfile && (
                 <div className='profile-sidebar'>
                     <div className='profile-sidebar__header'>
-                        <h3>Your Interview Plans</h3>
-                        <button onClick={() => setShowProfile(false)}>×</button>
+                        <div>
+                            <h3>Your Interview Plans</h3>
+                            {user && <p className='profile-sidebar__user'>Signed in as {user.username}</p>}
+                        </div>
+                        <div className='profile-sidebar__actions'>
+                            <button className='logout-btn' onClick={async () => { await handleLogout(); navigate('/login') }}>Logout</button>
+                            <button onClick={() => setShowProfile(false)}>×</button>
+                        </div>
                     </div>
                     <div className='profile-sidebar__content'>
                         {reports.length === 0 ? (
@@ -133,12 +148,13 @@ const Home = () => {
                             <span className='badge badge--required'>Required</span>
                         </div>
                         <textarea
+                            value={jobDescription}
                             onChange={(e) => { setJobDescription(e.target.value) }}
                             className='panel__textarea'
                             placeholder={`Paste the full job description here...\ne.g. 'Senior Frontend Engineer at Google requires proficiency in React, TypeScript, and large-scale system design...'`}
                             maxLength={5000}
                         />
-                        <div className='char-counter'>0 / 5000 chars</div>
+                        <div className='char-counter'>{jobDescription.length} / 5000 chars</div>
                     </div>
 
                     {/* Vertical Divider */}
@@ -188,6 +204,7 @@ const Home = () => {
                         <div className='self-description'>
                             <label className='section-label' htmlFor='selfDescription'>Quick Self-Description</label>
                             <textarea
+                                value={selfDescription}
                                 onChange={(e) => { setSelfDescription(e.target.value) }}
                                 id='selfDescription'
                                 name='selfDescription'

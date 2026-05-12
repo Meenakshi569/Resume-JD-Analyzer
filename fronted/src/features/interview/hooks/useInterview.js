@@ -24,7 +24,7 @@ export const useInterview = () => {
                 setReport(response.interviewReport)
             }
         } catch (error) {
-            console.log("Error generating report:", error)
+            console.log("Error generating report:", error?.response?.data || error.message || error)
         } finally {
             setLoading(false)
         }
@@ -41,7 +41,7 @@ export const useInterview = () => {
                 setReport(response.interviewReport)
             }
         } catch (error) {
-            console.log("Error fetching report:", error)
+            console.log("Error fetching report:", error?.response?.data || error.message || error)
         } finally {
             setLoading(false)
         }
@@ -57,7 +57,7 @@ export const useInterview = () => {
                 setReports(response.interviewReports)
             }
         } catch (error) {
-            console.log("Error fetching reports:", error)
+            console.log("Error fetching reports:", error?.response?.data || error.message || error)
         } finally {
             setLoading(false)
         }

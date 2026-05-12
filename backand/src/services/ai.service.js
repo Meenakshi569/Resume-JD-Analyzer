@@ -147,7 +147,7 @@ async function generateInterviewReport({ resume, selfDescription, jobDescription
     const prompt = `Generate a detailed interview report for a candidate using the following information.\n\nResume: ${resume}\nSelf Description: ${selfDescription}\nJob Description: ${jobDescription}\n\nReturn a valid JSON object with these fields exactly: title, matchScore, technicalQuestions, behavioralQuestions, skillGaps, preparationPlan.\n- technicalQuestions must be an array of at least 3 objects, each with keys question, intention, and answer. Do not serialize objects as strings.\n- behavioralQuestions must be an array of at least 3 objects, each with keys question, intention, and answer.\n- skillGaps must be an array of at least 1 object, each with keys skill and severity (low, medium, high).\n- preparationPlan must be an array of at least 3 objects, each with keys day, focus, and tasks (tasks must be an array of strings).\n\nUse the resume and self description to personalize the report and make the content practical, specific, and role-focused.\n`
 
     const response = await ai.models.generateContent({
-        model: "models/gemini-1.0-pro",
+        model: "gemini-1.0-pro",
         contents: prompt,
         config: {
             responseMimeType: "application/json"

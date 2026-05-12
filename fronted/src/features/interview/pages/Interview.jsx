@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import '../style/interview.scss'
 import { useInterview } from '../hooks/useInterview.js'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useAuth } from '../../auth/hooks/useAuth'
 
 
 
@@ -62,6 +63,7 @@ const Interview = () => {
     const [ showProfile, setShowProfile ] = useState(false)
     const [ initializing, setInitializing ] = useState(true)
     const { report, getReportById, loading, getResumePdf, reports, getReports } = useInterview()
+    const { user, handleLogout } = useAuth()
     const { interviewId } = useParams()
     const navigate = useNavigate()
 
@@ -121,8 +123,14 @@ const Interview = () => {
             {showProfile && (
                 <div className='profile-sidebar'>
                     <div className='profile-sidebar__header'>
-                        <h3>Your Interview Plans</h3>
-                        <button onClick={() => setShowProfile(false)}>×</button>
+                        <div>
+                            <h3>Your Interview Plans</h3>
+                            {user && <p className='profile-sidebar__user'>Signed in as {user.username}</p>}
+                        </div>
+                        <div className='profile-sidebar__actions'>
+                            <button className='logout-btn' onClick={async () => { await handleLogout(); navigate('/login') }}>Logout</button>
+                            <button onClick={() => setShowProfile(false)}>×</button>
+                        </div>
                     </div>
                     <div className='profile-sidebar__content'>
                         {reports.length === 0 ? (
