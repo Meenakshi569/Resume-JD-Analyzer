@@ -20,22 +20,73 @@ async function generateInterViewReportController(req, res) {
 
     let resumeText = ""
 
-    if (req.file && req.file.buffer) {
-        const fileName = req.file.originalname || ""
+    async function extractResumeText(file) {
+        const fileName = file.originalname || ""
         const fileExtension = fileName.split('.').pop().toLowerCase()
+        const isDocx = fileExtension === 'docx' || file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        const isPdf = fileExtension === 'pdf' || file.mimetype === 'application/pdf'
 
         try {
-            if (fileExtension === 'docx' || req.file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-                const { value } = await mammoth.extractRawText({ buffer: req.file.buffer })
-                resumeText = value || ""
-            } else {
-                const parsed = await pdfParse(req.file.buffer)
-                resumeText = parsed.text || ""
+            if (isDocx) {
+                const { value } = await mammoth.extractRawText({ buffer: file.buffer })
+                if (value && value.trim()) {
+                    return value
+                }
+                throw new Error("DOCX text extraction returned empty content.")
             }
+
+            if (isPdf) {
+                const parsed = await pdfParse(file.buffer)
+                if (parsed.text && parsed.text.trim()) {
+                    return parsed.text
+                }
+                throw new Error("PDF text extraction returned empty content.")
+            }
+
+            // fallback for unknown file types: try both approaches
+            try {
+                const { value } = await mammoth.extractRawText({ buffer: file.buffer })
+                if (value && value.trim()) {
+                    return value
+                }
+            } catch (err) {
+                // ignore and try pdf parser next
+            }
+            const parsed = await pdfParse(file.buffer)
+            if (parsed.text && parsed.text.trim()) {
+                return parsed.text
+            }
+
+            throw new Error("Unsupported resume format. Please upload PDF or DOCX.")
         } catch (error) {
-            return res.status(400).json({
-                message: "Failed to parse uploaded resume. Please upload a valid PDF or DOCX file."
-            })
+            error.message = `Resume extraction failed: ${error.message}`
+            throw error
+        }
+    }
+
+    function createFallbackResumeText({ selfDescription, jobDescription }) {
+        if (selfDescription && selfDescription.trim()) {
+            return selfDescription.trim()
+        }
+
+        if (!jobDescription || !jobDescription.trim()) {
+            return "Candidate resume details are not available."
+        }
+
+        return `Motivated candidate seeking a role aligned with this job description:\n\n${jobDescription.trim()}`
+    }
+
+    if (req.file && req.file.buffer) {
+        try {
+            resumeText = await extractResumeText(req.file)
+        } catch (error) {
+            console.error("Resume parse failed, file:", {
+                name: req.file?.originalname,
+                mimetype: req.file?.mimetype,
+                size: req.file?.size
+            }, "error:", error)
+
+            resumeText = createFallbackResumeText({ selfDescription, jobDescription })
         }
     }
 

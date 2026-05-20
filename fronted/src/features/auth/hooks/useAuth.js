@@ -68,6 +68,7 @@ export const useAuth = () => {
                 setUser(data.user)
             } catch (err) {
                 setUser(null)
+                window.localStorage.removeItem("token")
             } finally {
                 setLoading(false)
             }

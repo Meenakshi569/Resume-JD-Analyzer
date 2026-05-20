@@ -147,7 +147,7 @@ async function generateInterviewReport({ resume, selfDescription, jobDescription
     const prompt = `Generate a detailed interview report for a candidate using the following information.\n\nResume: ${resume}\nSelf Description: ${selfDescription}\nJob Description: ${jobDescription}\n\nReturn a valid JSON object with these fields exactly: title, matchScore, technicalQuestions, behavioralQuestions, skillGaps, preparationPlan.\n- technicalQuestions must be an array of at least 3 objects, each with keys question, intention, and answer. Do not serialize objects as strings.\n- behavioralQuestions must be an array of at least 3 objects, each with keys question, intention, and answer.\n- skillGaps must be an array of at least 1 object, each with keys skill and severity (low, medium, high).\n- preparationPlan must be an array of at least 3 objects, each with keys day, focus, and tasks (tasks must be an array of strings).\n\nUse the resume and self description to personalize the report and make the content practical, specific, and role-focused.\n`
 
     const response = await ai.models.generateContent({
-        model: "gemini-1.0-pro",
+        model: "gemini-2.5-flash",
         contents: prompt,
         config: {
             responseMimeType: "application/json"
@@ -160,7 +160,7 @@ async function generateInterviewReport({ resume, selfDescription, jobDescription
 
 async function generatePdfFromHtml(htmlContent) {
     const browser = await puppeteer.launch()
-    const page = await browser.newPage();
+    const page = await browser.newPage()
     await page.setContent(htmlContent, { waitUntil: "networkidle0" })
 
     const pdfBuffer = await page.pdf({
@@ -175,6 +175,78 @@ async function generatePdfFromHtml(htmlContent) {
     await browser.close()
 
     return pdfBuffer
+}
+
+function extractSectionLines(text, sectionTitle) {
+    if (!text || !sectionTitle) return []
+    const regex = new RegExp(`${sectionTitle}\\s*[:\\n]+([\\s\\S]*?)(?:\\n\\s*\\n|$)`, 'i')
+    const match = regex.exec(text)
+    if (!match || !match[1]) return []
+    return match[1]
+        .split(/\\r?\\n|;|•|‣|◦|-/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+}
+
+function createProfileSummary({ resume, selfDescription, jobDescription }) {
+    const cleanResume = resume && !/uploaded resume .* could not be parsed/i.test(resume.toLowerCase()) ? resume.trim() : ''
+    if (cleanResume) {
+        return cleanResume
+    }
+    if (selfDescription && selfDescription.trim()) {
+        return selfDescription.trim()
+    }
+    if (jobDescription && jobDescription.trim()) {
+        const titleMatch = jobDescription.match(/Job Title\s*[:\-]?\s*(.+)/i)
+        const title = titleMatch ? titleMatch[1].trim() : 'the role'
+        return `Experienced and motivated candidate applying for ${title}, with strong skills relevant to the role described below.`
+    }
+    return 'Candidate resume details not provided.'
+}
+
+function createFallbackResumeHtml({ resume, selfDescription, jobDescription }) {
+    const profileText = createProfileSummary({ resume, selfDescription, jobDescription })
+    const skills = extractSectionLines(jobDescription, 'Required Skills')
+    const responsibilities = extractSectionLines(jobDescription, 'Responsibilities')
+    const qualifications = extractSectionLines(jobDescription, 'Preferred Qualifications')
+    const summarySafe = profileText
+        .split(/\r?\n/)
+        .map((line) => `<p>${line.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`)
+        .join('')
+
+    const listToHtml = (items) => {
+        if (!items || items.length === 0) return ''
+        return `<ul>${items.map((item) => `<li>${item.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</li>`).join('')}</ul>`
+    }
+
+    return `
+        <html>
+            <head>
+                <meta charset="utf-8" />
+                <title>Generated Resume</title>
+                <style>
+                    body { font-family: Arial, sans-serif; margin: 24px; color: #111827; }
+                    h1 { font-size: 28px; margin-bottom: 4px; }
+                    h2 { font-size: 18px; margin: 22px 0 8px; border-bottom: 1px solid #d1d5db; padding-bottom: 4px; }
+                    p, li { line-height: 1.5; margin: 8px 0; }
+                    ul { margin: 8px 0 16px 20px; }
+                    .section { margin-bottom: 16px; }
+                    .subtle { color: #6b7280; font-size: 14px; }
+                </style>
+            </head>
+            <body>
+                <h1>Resume</h1>
+                <p class="subtle">Tailored for: ${jobDescription ? jobDescription.replace(/</g, '&lt;').replace(/>/g, '&gt;') : 'Job description not provided'}</p>
+                <div class="section">
+                    <h2>Professional Summary</h2>
+                    ${summarySafe}
+                </div>
+                ${skills.length ? `<div class="section"><h2>Key Skills</h2>${listToHtml(skills)}</div>` : ''}
+                ${responsibilities.length ? `<div class="section"><h2>Responsibilities</h2>${listToHtml(responsibilities)}</div>` : ''}
+                ${qualifications.length ? `<div class="section"><h2>Qualifications</h2>${listToHtml(qualifications)}</div>` : ''}
+            </body>
+        </html>
+    `
 }
 
 async function generateResumePdf({ resume, selfDescription, jobDescription }) {
@@ -196,21 +268,27 @@ async function generateResumePdf({ resume, selfDescription, jobDescription }) {
                         The resume should not be so lengthy, it should ideally be 1-2 pages long when converted to PDF. Focus on quality rather than quantity and make sure to include all the relevant information that can increase the candidate's chances of getting an interview call for the given job description.
                     `
 
-    const response = await ai.models.generateContent({
-        model: "gemini-1.0-pro",
-        contents: prompt,
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: zodToJsonSchema(resumePdfSchema),
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: zodToJsonSchema(resumePdfSchema),
+            }
+        })
+
+        const jsonContent = JSON.parse(response.text)
+
+        if (jsonContent && typeof jsonContent.html === 'string' && jsonContent.html.trim()) {
+            return await generatePdfFromHtml(jsonContent.html)
         }
-    })
+    } catch (error) {
+        console.error('AI resume PDF generation failed, using fallback HTML:', error.message || error)
+    }
 
-
-    const jsonContent = JSON.parse(response.text)
-
-    const pdfBuffer = await generatePdfFromHtml(jsonContent.html)
-
-    return pdfBuffer
+    const fallbackHtml = createFallbackResumeHtml({ resume, selfDescription, jobDescription })
+    return await generatePdfFromHtml(fallbackHtml)
 
 }
 
